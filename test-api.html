@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jitsi Meet API Test - Participant Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .danger {
+            background-color: #f44336;
+        }
+        .danger:hover {
+            background-color: #da190b;
+        }
+        .info {
+            background-color: #2196F3;
+        }
+        .info:hover {
+            background-color: #0b7dda;
+        }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .participant-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .participant-card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            background: white;
+        }
+        .participant-card h4 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        .status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin: 2px;
+        }
+        .status.muted {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .status.unmuted {
+            background-color: #e8f5e8;
+            color: #2e7d32;
+        }
+        #jitsi-container {
+            width: 100%;
+            height: 400px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎥 Jitsi Meet API Test - Participant Control</h1>
+            <p>Testing new IFrame API features for muting/unmuting participants by ID</p>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 Participant Information</h3>
+            <button onclick="getParticipantsInfo()" class="info">Get Participants Info</button>
+            <button onclick="clearLog()" class="danger">Clear Log</button>
+            <div id="participants-container" class="participant-list"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎤 Audio Control</h3>
+            <input type="text" id="audio-participant-id" placeholder="Enter participant ID" style="padding: 8px; margin: 5px; width: 200px;">
+            <button onclick="muteParticipantAudio()" class="danger">Mute Audio</button>
+            <button onclick="unmuteParticipantAudio()" class="info">Unmute Audio</button>
+        </div>
+
+        <div class="test-section">
+            <h3>📹 Video Control</h3>
+            <input type="text" id="video-participant-id" placeholder="Enter participant ID" style="padding: 8px; margin: 5px; width: 200px;">
+            <button onclick="muteParticipantVideo()" class="danger">Mute Video</button>
+            <button onclick="unmuteParticipantVideo()" class="info">Unmute Video</button>
+        </div>
+
+        <div class="test-section">
+            <h3>📝 Event Log</h3>
+            <div id="log" class="log"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎥 Jitsi Meet Conference</h3>
+            <div id="jitsi-container"></div>
+        </div>
+    </div>
+
+    <script src="https://meet.jit.si/external_api.js"></script>
+    <script>
+        let api = null;
+        let participants = [];
+
+        // Initialize Jitsi Meet
+        function initJitsi() {
+            const domain = 'meet.jit.si';
+            const options = {
+                roomName: 'test-participant-control-' + Math.random().toString(36).substr(2, 9),
+                width: '100%',
+                height: '100%',
+                parentNode: document.querySelector('#jitsi-container'),
+                configOverwrite: {
+                    startWithAudioMuted: false,
+                    startWithVideoMuted: false,
+                    enableWelcomePage: false
+                },
+                interfaceConfigOverwrite: {
+                    TOOLBAR_BUTTONS: [
+                        'microphone', 'camera', 'closedcaptions', 'desktop', 'fullscreen',
+                        'fodeviceselection', 'hangup', 'profile', 'chat', 'recording',
+                        'livestreaming', 'etherpad', 'sharedvideo', 'settings', 'raisehand',
+                        'videoquality', 'filmstrip', 'invite', 'feedback', 'stats', 'shortcuts',
+                        'tileview', 'videobackgroundblur', 'download', 'help', 'mute-everyone'
+                    ]
+                }
+            };
+
+            api = new JitsiMeetExternalAPI(domain, options);
+
+            // Event listeners for our new features
+            api.addListener('participantAudioStatusChanged', (data) => {
+                log(`🎤 Audio status changed: Participant ${data.participantId} is now ${data.isMuted ? 'muted' : 'unmuted'}`);
+                updateParticipantsDisplay();
+            });
+
+            api.addListener('participantVideoStatusChanged', (data) => {
+                log(`📹 Video status changed: Participant ${data.participantId} is now ${data.isMuted ? 'muted' : 'unmuted'}`);
+                updateParticipantsDisplay();
+            });
+
+            // Standard event listeners
+            api.addListener('participantJoined', (data) => {
+                log(`👤 Participant joined: ${data.displayName || data.id}`);
+                updateParticipantsDisplay();
+            });
+
+            api.addListener('participantLeft', (data) => {
+                log(`👋 Participant left: ${data.displayName || data.id}`);
+                updateParticipantsDisplay();
+            });
+
+            api.addListener('videoConferenceJoined', () => {
+                log('✅ Successfully joined the conference');
+                updateParticipantsDisplay();
+            });
+
+            api.addListener('videoConferenceLeft', () => {
+                log('❌ Left the conference');
+            });
+
+            api.addListener('errorOccurred', (error) => {
+                log(`❌ Error: ${error.error}`);
+            });
+
+            log('🚀 Jitsi Meet initialized successfully');
+        }
+
+        // Get participants information with new status fields
+        function getParticipantsInfo() {
+            if (!api) {
+                log('❌ API not initialized');
+                return;
+            }
+
+            try {
+                participants = api.getParticipantsInfo();
+                log(`📊 Found ${participants.length} participants`);
+                
+                participants.forEach(participant => {
+                    log(`👤 ${participant.displayName || participant.id}: Audio=${participant.isAudioMuted ? 'Muted' : 'Unmuted'}, Video=${participant.isVideoMuted ? 'Muted' : 'Unmuted'}`);
+                });
+
+                updateParticipantsDisplay();
+            } catch (error) {
+                log(`❌ Error getting participants: ${error.message}`);
+            }
+        }
+
+        // Update the participants display
+        function updateParticipantsDisplay() {
+            const container = document.getElementById('participants-container');
+            container.innerHTML = '';
+
+            participants.forEach(participant => {
+                const card = document.createElement('div');
+                card.className = 'participant-card';
+                
+                const audioStatus = participant.isAudioMuted ? 'muted' : 'unmuted';
+                const videoStatus = participant.isVideoMuted ? 'muted' : 'unmuted';
+                
+                card.innerHTML = `
+                    <h4>${participant.displayName || participant.id}</h4>
+                    <div>
+                        <span class="status ${audioStatus}">🎤 Audio: ${audioStatus.toUpperCase()}</span>
+                        <span class="status ${videoStatus}">📹 Video: ${videoStatus.toUpperCase()}</span>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <button onclick="muteParticipantAudioById('${participant.id}')" class="danger" style="font-size: 12px; padding: 5px 8px;">Mute Audio</button>
+                        <button onclick="unmuteParticipantAudioById('${participant.id}')" class="info" style="font-size: 12px; padding: 5px 8px;">Unmute Audio</button>
+                        <button onclick="muteParticipantVideoById('${participant.id}')" class="danger" style="font-size: 12px; padding: 5px 8px;">Mute Video</button>
+                        <button onclick="unmuteParticipantVideoById('${participant.id}')" class="info" style="font-size: 12px; padding: 5px 8px;">Unmute Video</button>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        // Audio control functions
+        function muteParticipantAudio() {
+            const participantId = document.getElementById('audio-participant-id').value;
+            if (!participantId) {
+                log('❌ Please enter a participant ID');
+                return;
+            }
+            muteParticipantAudioById(participantId);
+        }
+
+        function unmuteParticipantAudio() {
+            const participantId = document.getElementById('audio-participant-id').value;
+            if (!participantId) {
+                log('❌ Please enter a participant ID');
+                return;
+            }
+            unmuteParticipantAudioById(participantId);
+        }
+
+        function muteParticipantAudioById(participantId) {
+            if (!api) {
+                log('❌ API not initialized');
+                return;
+            }
+
+            try {
+                api.executeCommand('muteParticipantAudio', participantId);
+                log(`🎤 Muting audio for participant: ${participantId}`);
+            } catch (error) {
+                log(`❌ Error muting audio: ${error.message}`);
+            }
+        }
+
+        function unmuteParticipantAudioById(participantId) {
+            if (!api) {
+                log('❌ API not initialized');
+                return;
+            }
+
+            try {
+                api.executeCommand('unmuteParticipantAudio', participantId);
+                log(`🎤 Unmuting audio for participant: ${participantId}`);
+            } catch (error) {
+                log(`❌ Error unmuting audio: ${error.message}`);
+            }
+        }
+
+        // Video control functions
+        function muteParticipantVideo() {
+            const participantId = document.getElementById('video-participant-id').value;
+            if (!participantId) {
+                log('❌ Please enter a participant ID');
+                return;
+            }
+            muteParticipantVideoById(participantId);
+        }
+
+        function unmuteParticipantVideo() {
+            const participantId = document.getElementById('video-participant-id').value;
+            if (!participantId) {
+                log('❌ Please enter a participant ID');
+                return;
+            }
+            unmuteParticipantVideoById(participantId);
+        }
+
+        function muteParticipantVideoById(participantId) {
+            if (!api) {
+                log('❌ API not initialized');
+                return;
+            }
+
+            try {
+                api.executeCommand('muteParticipantVideo', participantId);
+                log(`📹 Muting video for participant: ${participantId}`);
+            } catch (error) {
+                log(`❌ Error muting video: ${error.message}`);
+            }
+        }
+
+        function unmuteParticipantVideoById(participantId) {
+            if (!api) {
+                log('❌ API not initialized');
+                return;
+            }
+
+            try {
+                api.executeCommand('unmuteParticipantVideo', participantId);
+                log(`📹 Unmuting video for participant: ${participantId}`);
+            } catch (error) {
+                log(`❌ Error unmuting video: ${error.message}`);
+            }
+        }
+
+        // Utility functions
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', () => {
+            log('🚀 Initializing Jitsi Meet API Test...');
+            initJitsi();
+        });
+    </script>
+</body>
+</html>
